@@ -260,3 +260,30 @@ def get_summary_stats(df):
         'start_date': df.index[0].strftime('%Y-%m-%d'),
         'end_date': df.index[-1].strftime('%Y-%m-%d')
     }
+
+
+def filter_data_by_date(df, reference_date):
+    """
+    Filter data up to and including a specific reference date
+    
+    Args:
+        df: DataFrame with OHLCV data (time-indexed)
+        reference_date: datetime.date or str in 'YYYY-MM-DD' format
+    
+    Returns:
+        Filtered DataFrame containing data up to reference_date, or None if invalid
+    """
+    if df is None or df.empty:
+        return None
+    
+    # Convert reference_date to pandas Timestamp if needed
+    if isinstance(reference_date, str):
+        reference_date = pd.Timestamp(reference_date).date()
+    
+    # Filter data up to and including the reference date
+    filtered_df = df[df.index.date <= reference_date].copy()
+    
+    if filtered_df.empty or len(filtered_df) < 50:
+        return None
+    
+    return filtered_df

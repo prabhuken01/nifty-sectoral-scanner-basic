@@ -5,12 +5,13 @@ Main Streamlit application
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
+import pytz
 
 # Import modules
 from config import SECTORS, SECTOR_INDICATORS, APP_CONFIG, INDICATOR_PARAMS, INDICATOR_EXPLANATIONS
-from data_loader import load_sector_data, validate_data, get_latest_price, get_price_change
+from data_loader import load_sector_data, validate_data, get_latest_price, get_price_change, filter_data_by_date
 from indicators import (
     calculate_rsi, calculate_bollinger_bands, calculate_atr,
     calculate_adx, calculate_stochastic, calculate_vwap,
@@ -40,8 +41,9 @@ def display_header():
         st.markdown("*Real-time sectoral rotation analysis with advanced technical indicators*")
     
     with col2:
-        # Display last updated time
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Display last updated time in IST (Indian Standard Time)
+        ist = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
         st.markdown(f"**Last Updated:**")
         st.markdown(f"🕐 `{current_time}`")
 
@@ -378,13 +380,34 @@ def sidebar_controls():
     Returns:
         Dictionary with control values
     """
-    st.sidebar.title("⚙️ Settings")
+    st.sidebar.title("⚙️ Configuration")
     
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📅 Data Configuration")
+    st.sidebar.subheader("📅 Select Date")
+    
+    # Date selection
+    selected_date = st.sidebar.date_input(
+        "Analysis Date",
+        value=datetime.now().date(),
+        help="Select the date for which to carry out the analysis"
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📊 Interval")
+    
+    # Interval selection
+    interval = st.sidebar.selectbox(
+        "Data Interval",
+        ["1d", "1h"],
+        format_func=lambda x: "Daily (1d)" if x == "1d" else "Hourly (1h)",
+        help="Time interval for analysis"
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📈 Data Configuration")
     
     period = st.sidebar.selectbox(
-        "Data Period",
+        "Historical Period",
         ["3mo", "6mo", "1y", "2y"],
         index=1,
         help="Historical data period to analyze"
@@ -429,6 +452,8 @@ def sidebar_controls():
     """)
     
     return {
+        'selected_date': selected_date,
+        'interval': interval,
         'period': period,
         'n_sessions': n_sessions,
         'auto_refresh': auto_refresh
@@ -444,17 +469,34 @@ def main():
     # Sidebar controls
     controls = sidebar_controls()
     
+    # Display selected analysis date and interval
+    st.info(f"📍 Analysis for: **{controls['selected_date'].strftime('%Y-%m-%d')}** | Interval: **{controls['interval'].upper()}**")
+    
     # Load data
     with st.spinner("📡 Loading market data..."):
         sector_data = load_sector_data(
             SECTORS,
             period=controls['period'],
-            interval='1d'
+            interval=controls['interval']
         )
     
     if not sector_data:
         st.error("❌ Failed to load market data. Please try again later.")
         return
+    
+    # Filter data by selected date
+    with st.spinner("🔍 Filtering data for selected date..."):
+        filtered_sector_data = {}
+        for sector_name, df in sector_data.items():
+            filtered_df = filter_data_by_date(df, controls['selected_date'])
+            if filtered_df is not None:
+                filtered_sector_data[sector_name] = filtered_df
+        
+        sector_data = filtered_sector_data
+        
+        if not sector_data:
+            st.error(f"❌ No data available for the selected date: {controls['selected_date'].strftime('%Y-%m-%d')}")
+            return
     
     st.success(f"✅ Loaded data for {len(sector_data)} sectors")
     
